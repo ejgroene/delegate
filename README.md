@@ -153,9 +153,9 @@ method you are refining via `self.next`.
     bottom.g()                           # will return 16
 
 ### Closing Remarks
-Delegation is formally a more general concept than inheritance. You can bould
+Delegation is formally a more general concept than inheritance. You can build
 inheritance using delegation, but not the other way around. I found the inheritance-
-based languages like Java and Python (and to some extend Smalltalk) not very easy
+based languages like Java and Python (and to some extent Smalltalk) not very easy
 to understand. In fact I believe the inheritance lingo obfuscates things that are,
 in essence, not that hard.  
 
@@ -163,21 +163,22 @@ Sometime in 2004 I created `Delegator`: true delegation in Java,
 (https://sourceforge.net/projects/delegator/) which I showed off on the Object
  Technology Conference (now SPA). Now there is also true delegation for Python!  
 
-I have created a Python version of delegation aiming to replace inheritance altogether.
+I have created a Python version of delegation aiming to replace inheritance alltogether.
 For Python, that would relief programmers of the burden of understanding the Python
 object-lingo which is, I am sorry, very complicated.  
 
-As to the main cause of why things in Python as so complicated I have a possible clue.
+As to the main cause of why things in Python are so complicated I have a possible clue.
 I think is is primarily due to the fact that the chain of creation does not follow
 the chain of inheritance.  
 
-The chain of creating is roughly: type -> metaclass -> class -> instance. Although the
+The chain of creating is roughly: `type -> metaclass -> class -> instance`. Although the
 class-instance relation is easy to use, extending this further requires the use of
-special metaclasses. So the does not look the same depending on the level.  
+special metaclasses (__metaclass__). So this does not look the same depending on the level,
+and is quite confusing.  
 
-The chain of inheritance depends on the base classes you use, which is a orthorgonal 
-concept (to the chain of creation). Base classes are what you think off in the first
-place when talking about inheritance in Python. These appear between () in the class
+The chain of inheritance depends on the base classes you use, which is an orthogonal 
+concept (to the chain of creation). Base classes are what you think of in the first
+place when thinking about inheritance in Python. These appear between () in the class
 statements:
 
 	class a(b, c, d):
@@ -193,11 +194,11 @@ bases. More or less similar is:
 	class c(c):
 		pass
 
-The father of all bases is `object`, while the mother of all classes is 'type'.  
+The father of all bases is `object`, while the mother of all (meta-) classes is 'type'.  
 
 The base class of `type` is `object`, and the class of `object` is `type`. Of course.  
 
-Now try to think of these two concepts: bases and types, one in vertical direction and
+Now try to think of these two concepts, bases and types, as one in vertical direction and
 the other in the horizontal direction. You now have a 2-dimensional inheritance solution.  
 
 The Python VM calculates an Method Resolution Order (MRO) for each class that takes into account both
@@ -206,12 +207,13 @@ and types that are visited in order to perform attribute lookup.
 
 I you want to understand that, try reading this explaination of ionel: https://blog.ionelmc.ro/2015/02/09/understanding-python-metaclasses/.  
 
-My point is: I do not have enough room in my head for that kind of complicated schemes. As a result,
+My point is: I do not have enough room in my head for that kind of complicated schemes.
+I forget them. They swap out. Other stuff competes for my brain. As a result,
 powerful use of meta-classes remains reserved for very special cases and is not suitable for daily
 use.  
 
-I want to use concepts of metaclasses so easy that I can use it on a daily bases. Just like
-Javascript users use delegation on a daily basis, perhaps without even noticing it.  
+I want the concepts of metaclasses to be so easy that I can use it on a daily bases erm, basis. Just like
+Javascript users use prototyping on a daily basis, perhaps without even noticing it.  
 
 I did that by replacing inheritance with delegation AND unifying the chain of creation with
 the chain of lookup.
