@@ -14,20 +14,20 @@ than another object, referenced as `self.next`. This object can also
 have a prototype and so on. All objects in the chain behave the same way.  
 
 Within methods `self` always refers to the object the methods was called
-on. The object that defined the current method is refered to as `this`.
+on. The object that defined the current method is refered to as `self.this`.
 
 Suppose we have three objects in a chain and `object_b` defines `f`.
 
-    object_a.f()         def f(self, this):
+    object_a.f()         def f(self):
        \                     return 42
         \
         object_a         object_b         object_c
             \_____next_____/ \_____next_____/
 
-         self              this          self.next
+         self            self.this        self.next
 
 When we call `object_a.f()`, `f` will be found on `object_b` and executed 
-with `self` bound to `object_a`, `this` bound to `object_b` and `self.next` 
+with `self` bound to `object_a`, `self.this` bound to `object_b` and `self.next` 
 pointing to `object_c`.  
 
 This scheme will always be the same, on each level.
@@ -123,13 +123,12 @@ accepted as method. The actual argument will point to the object the method
 is called on, not the object the method is defined on.
 
 ### This
-If a function defines `this` as a second argument this argument will be bound
-to the object on which the method is defined. To be precise: the object the
-method is found on during lookup.
+A method can use `self.this` to refer to the object on which the method is
+defined. To be precise: the object the method is found on during lookup.
 
 ### Next
 The attribute `self.next` points to the next delegate in the chain. This is 
-the one just after `this`. This is convenient for if a method refines behaviour
+the one just after `self.this`. This is convenient for if a method refines behaviour
 of another method up in the chain (alas class thinking ;-). You can invoke the
 method you are refining via `self.next`.
 
@@ -139,8 +138,8 @@ method you are refining via `self.next`.
         a = 16
         def f(self):
             return self.a
-        def g(self, this):
-            return this.a
+        def g(self):
+            return self.this.a
 
     class middle(top):
         def f(self):
