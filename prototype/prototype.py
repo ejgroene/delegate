@@ -1,79 +1,14 @@
 from types import FunctionType, MethodType, ClassType
 from inspect import getargspec, isfunction, isclass
 
-python_object = object # Yes, this module redefines the meaning of object
-
-"""
- This module redefines 'object' and replaces inheritance with delegation.
- It solves the 'self-problem' and has a single lineair delegate list:
- object, type, class, metaclass, meta-meta-metaclass made easy!
-
- Each object has a single prototype, referenced as self.next and all
- objects in the chain behave the same way.
-
- Within methods self always refers to the object the methods was called
- on. The object that defined the current method is refered to as self.this.
-
- Object creation:
-
-   a = object()                         # creates an empty object
-   b = object(a)                        # creates b, delegating to a
-   a = object(c=10)                     # initializes a.c to be 10
-   a = object(lambda: {'b': 10})        # initializes a.c to be 10
-   a = object(f=lambda self: 42)        # adds method a.f()
-   def f(self):
-     return 42
-   a = object(f)                        # adds method a.f()
-
-   all arguments above can be mixed and used at the same time. Given an
-   existing object x, you can replace 'object' with 'x'. This will let
-   the new object delegate to x:
-
-   b = a()                              # equivalent to a = object(a)
-
- Convenient object creation:
-
-   @object
-   class a:                             # creates object a
-     c = 10
-     def f(self):
-        return 42
-
-   @a                                   # creates b, delegating to a
-   class b:
-     c = 42
- 
-   class a(object):                     # creates object a
-     c = 10
-     def f(self):
-        return 42
-
-   class b(a):                          # creates b, delegating to a
-     c = 42
-
-   @object
-   def a():                             # creates a from initializer
-     c = 10
-     def f(self):
-       return 42
-     return locals()
-
-   @a
-   def b():                             # creates b delegating to a
-     c = 42
-
-   all forms above create objects (instances) not classes. Forget about
-   classes.
-   """
-
-class Self(python_object):
+class Self(object):
     """ Instances of this class represent self during method calls in order
         to distinquis between self and this."""
 
     def __init__(me, self, this, prox=None):
-        python_object.__setattr__(me, '_self', self)
-        python_object.__setattr__(me, '_this', this)
-        python_object.__setattr__(me, '_prox', prox if prox else this)
+        object.__setattr__(me, '_self', self)
+        object.__setattr__(me, '_this', this)
+        object.__setattr__(me, '_prox', prox if prox else this)
 
     @property
     def this(me):
@@ -95,22 +30,22 @@ class Self(python_object):
 
 class meta(type):
     """ This type turns inheritance into delegation for
-          class name(object): """
+          class name(prototype): """
 
     def __new__(self, name, bases, dct):
-        if name == 'object': #bootstrap
+        if name == 'prototype': #bootstrap
             return type.__new__(self, name, bases, dct)
-        return object(**dct)
+        return prototype(**dct)
 
-class object(python_object):
+class prototype(object):
     """ This is the class for all objects. """
 
     __metaclass__ = meta
 
     def __new__(*_, **__):
         """ This method turns inheritance into delegation for
-              class name(object()): """
-        return python_object.__new__(object)
+              class name(prototype()): """
+        return object.__new__(prototype)
 
     def __init__(self, *initializers, **attributes):
         if tuple(type(i) for i in initializers) == (str, tuple, dict):
@@ -128,7 +63,7 @@ class object(python_object):
                 self._prototypes += arg._prototypes
             elif isclass(arg):                          # new style class: prototype
                 self._prototypes += (arg,)
-            elif isinstance(arg, python_object) and type(arg).__module__ != '__builtin__': 
+            elif isinstance(arg, object) and type(arg).__module__ != '__builtin__': 
                 self._prototypes += (arg,)              # new style object: prototype
             else:
                 raise Exception("not a valid argument: %s,  %s" % (initializers, attributes))
@@ -136,25 +71,25 @@ class object(python_object):
            
     def __getattribute__(self, name, prototypes=None):
         if name.startswith("_"):
-            return python_object.__getattribute__(self, name)
+            return object.__getattribute__(self, name)
         for this in prototypes or self._prototypes:
             try:
-                attribute = python_object.__getattribute__(this, name)
+                attribute = object.__getattribute__(this, name)
             except AttributeError:
                 continue
             if isfunction(attribute):
                 return MethodType(attribute, Self(self, this, self))
             if isinstance(attribute, dict):
-                return object(self, **dict((str(k),v) for k,v in attribute.iteritems()))
+                return prototype(self, **dict((str(k),v) for k,v in attribute.iteritems()))
             return attribute
 
     def __call__(self, *prototypes_or_functions, **attributes):
-        return object(self, *prototypes_or_functions, **attributes)
+        return prototype(self, *prototypes_or_functions, **attributes)
 
     #behave a bit dict'isch
     def __getitem__(self, name):  return getattr(self, str(name)) 
     def __contains__(self, name): return name in self.__dict__
-    def __repr__(self):           return "object"+repr(dict(self.__iter__()))
+    def __repr__(self):           return "prototype"+repr(dict(self.__iter__()))
     def __iter__(self):           return ((k,v) for k,v in \
                                     self.__dict__.iteritems() if not k.startswith('_'))
 
@@ -162,7 +97,7 @@ from autotest import autotest
 
 @autotest
 def simple_object_assembled_manually():
-    a = object()
+    a = prototype()
     a.x = 1
     assert a.x == 1
     def f(self):
@@ -173,19 +108,19 @@ def simple_object_assembled_manually():
     a.f = f
     assert type(a.f) == MethodType
     assert a.f() == a
-    b = object()
+    b = prototype()
     assert a != b
 
 @autotest
 def simple_object_with_old_style_class_syntax():
-    @object
+    @prototype
     class a:
         x = 1
         def f(self):
             return self
     assert type(a.f) == MethodType
     assert a.f() == a
-    @object
+    @prototype
     class b:
         pass
     assert a != b
@@ -193,7 +128,7 @@ def simple_object_with_old_style_class_syntax():
 @autotest
 def create_your_first_prototype():
 
-    @object
+    @prototype
     class creature:
         legs = 4
         def age(self):
@@ -217,20 +152,20 @@ def create_your_first_prototype():
 @autotest
 def alternative_syntax_1():
 
-    creature = object(legs=4, age=lambda self: 2016 - self.birth_date)
+    creature = prototype(legs=4, age=lambda self: 2016 - self.birth_date)
     assert creature.legs == 4
 
     person = creature(legs=2)
     assert person.legs == 2
 
-    pete = object(person, birth_date=1990)
+    pete = prototype(person, birth_date=1990)
     assert pete.legs == 2
     assert pete.age() == 26
 
 @autotest
 def alternative_syntax_2():
 
-    @object
+    @prototype
     def creature():
         legs = 4
         def age(self):
@@ -252,7 +187,7 @@ def alternative_syntax_2():
 @autotest
 def anonymous_prototype_because_we_can():
 
-    @object(age=lambda self: 2016 - self.birth_date)
+    @prototype(age=lambda self: 2016 - self.birth_date)
     class person:
         legs = 2
     
@@ -266,26 +201,26 @@ def accept_noarg_ctor_function_creating_attributes():
     def f(not_self, a, b=10):
         pass
     try:
-        object(f)
+        prototype(f)
         assert False
     except Exception as e:
         assert "not a valid argument:" in str(e), str(e)
     def g(a, b):
         pass
     try:
-        object(g)
+        prototype(g)
         assert False
     except Exception as e:
         assert "not a valid argument:" in str(e)
     try:
-        object('10')
+        prototype('10')
         assert False
     except Exception as e:
         assert "not a valid argument:" in str(e), e
 
 @autotest
 def simply_pass_functions_as_attributes():
-    o = object()
+    o = prototype()
     def f(self):
         return "Hello!"
     o2 = o(f=f)
@@ -297,35 +232,35 @@ def simply_pass_functions_as_attributes():
     assert o3.g() == "Goodbye!"
 
 @autotest
-def create_simple_object():
-    o = object()
+def create_simple_prototype():
+    o = prototype()
     assert o
-    o = object(a=1)
+    o = prototype(a=1)
     assert o.a == 1
-    o1 = object(o)
+    o1 = prototype(o)
     assert o1.a == 1
-    o1 = object(o, a=2)
+    o1 = prototype(o, a=2)
     assert o1.a == 2
-    o2 = object(o1, f=lambda self: 42)
+    o2 = prototype(o1, f=lambda self: 42)
     assert o2.f() == 42
     def f(self): return 84
-    o2 = object(o1, f=f)
+    o2 = prototype(o1, f=f)
     assert o2.f() == 84
     def g(self, x): return 2 * x
-    o2 = object(o1, f, g)
+    o2 = prototype(o1, f, g)
     assert o2.f() == 84
     assert o2.g(9) == 18
     def ctor():
         return {"a": 23}
-    o3 = object(o2, ctor)
+    o3 = prototype(o2, ctor)
     assert o3.a == 23, o3.a
-    o3 = object(o2, lambda self: 23, lambda self: 56, lambda: {"x": 89})
+    o3 = prototype(o2, lambda self: 23, lambda self: 56, lambda: {"x": 89})
     assert o3["<lambda>"]() == 56  #yuk
     assert o3.x == 89
 
 @autotest
 def create_using_old_style_python_class():
-    @object
+    @prototype
     class obj:
         a = 42
         def f(self):
@@ -335,7 +270,7 @@ def create_using_old_style_python_class():
 
 @autotest
 def calling_object_create_new_object():
-    p = object()
+    p = prototype()
     o = p(a=42)
     assert o
     assert o != p
@@ -348,9 +283,9 @@ def self_is_callable_and_creates_new_object():
         return "f"
     def g(self):
         o1 = self()
-        o2 = object(self)
+        o2 = prototype(self)
         return o1, o2
-    o = object(f, g)
+    o = prototype(f, g)
     x, y = o.g()
     assert x.f() == "f", x.f()
     assert y.f() == "f", y.f()
@@ -362,16 +297,16 @@ def embedded_object_creation_with_self_as_decorator():
         def f():
             return {"a": 42}
         return f
-    o = object(f, a=24)
+    o = prototype(f, a=24)
     assert o.f().a == 42
 
 @autotest
 def create_small_hierarchy_of_object():
-    creature = object(alive=True)
+    creature = prototype(alive=True)
     @creature
     class person:
         def age(self): return 2015 - self.birth
-    me = object(person, birth=1990)
+    me = prototype(person, birth=1990)
     assert me.age() == 25, me
     assert me.alive == True
     me.alive = False
@@ -385,36 +320,36 @@ def create_small_hierarchy_of_object():
 def create_object_with_multiple_prototypes():
     def f1(self):
         return "f1"
-    o1 = object(f1)
+    o1 = prototype(f1)
     def f2(self):
         return "f2"
-    o2 = object(f2)
-    o3 = object(o1, o2)
+    o2 = prototype(f2)
+    o3 = prototype(o1, o2)
     assert o3.f1() == "f1"
     assert o3.f2() == "f2"
     def f2(self):
         return "new f2"
-    o4 = object(f2)
-    o5 = object(o3, o4)
+    o4 = prototype(f2)
+    o5 = prototype(o3, o4)
     assert o5.f2() == "f2"
-    o5 = object(o4, o3)
+    o5 = prototype(o4, o3)
     assert o5.f2() == "new f2"
     def f2(self):
         return "own f2"
-    o6 = object(o5, o4, o3, o2, o1, f2)
+    o6 = prototype(o5, o4, o3, o2, o1, f2)
     assert o6.f2() == "own f2"
     assert o6.f1() == "f1"
     
 @autotest
 def create_single_method_object_aka_functor():
-    @object
+    @prototype
     def f(self):
         return "hello"
     assert f.f() == "hello"
 
 @autotest
 def lookup_globals():
-    @object
+    @prototype
     def one():
         def f(self):
             return autotest
@@ -423,15 +358,15 @@ def lookup_globals():
 
 @autotest
 def lookup_attributes():
-    o = object(a=1, b=2)
+    o = prototype(a=1, b=2)
     assert "a" in o
     assert "b" in o
     assert "c" not in o
-    assert str(o) == "object{'a': 1, 'b': 2}", str(o)
+    assert str(o) == "prototype{'a': 1, 'b': 2}", str(o)
 
 @autotest
 def lookup_function():
-    @object
+    @prototype
     class A:
         def f(self):
             return self.g()
@@ -448,7 +383,7 @@ def This_is_Considered_not_Part_of():
 
     import this
 
-    @object
+    @prototype
     class A:
         a = 42
         def f(self): return self.a
@@ -469,7 +404,7 @@ def This_is_Considered_not_Part_of():
 
 @autotest
 def next_gives_access_to_objects_higher_up_in_the_chain():
-    @object
+    @prototype
     class A:
         def f(self): return "A"
     @A
@@ -484,7 +419,7 @@ def next_gives_access_to_objects_higher_up_in_the_chain():
 
 @autotest
 def this_preserves_self_when_binding_and_calling_methods():
-    @object
+    @prototype
     class A:
         x = 'a'
         def f(self):
@@ -502,7 +437,7 @@ def this_preserves_self_when_binding_and_calling_methods():
     assert C.f() == "CBA + c"
 
 def more_elaborate_example_of_using_this_and_next():
-    @object
+    @prototype
     def Obj():
         a = 42
         def f(self):
@@ -537,7 +472,7 @@ def more_elaborate_example_of_using_this_and_next():
 
 @autotest
 def create_object_with_this():
-    @object
+    @prototype
     class a:
         def f(self):
             return self(b=43), self.this(b=42)
@@ -559,7 +494,7 @@ def create_object_with_this():
 
 #@autotest
 def private_functions(): # naah
-    @object
+    @prototype
     class a:
         def f(self):
             try:
@@ -580,14 +515,14 @@ def private_functions(): # naah
 
 @autotest
 def normal_python_classes_can_be_delegated_to():
-    class a(python_object):
+    class a(object):
         c = 10
         def f(self):
             return 42
         def g(self):
             return self.b # Oh yeah!
     assert isinstance(a, type)
-    o = object(a, b=67)
+    o = prototype(a, b=67)
     assert o.f() == 42
     assert o.b == 67
     assert o.g() == 67
@@ -595,7 +530,7 @@ def normal_python_classes_can_be_delegated_to():
 
 @autotest
 def normal_python_object_can_be_delegated_to():
-    class A(python_object):
+    class A(object):
         c = 16
         def f(self):
             return 23
@@ -603,8 +538,8 @@ def normal_python_object_can_be_delegated_to():
             return self.d
     a = A()
     a.d = 8
-    assert isinstance(a, python_object)
-    o = object(a)
+    assert isinstance(a, object)
+    o = prototype(a)
     assert o.f() == 23
     assert o.c == 16
     assert o.d == 8
@@ -612,11 +547,11 @@ def normal_python_object_can_be_delegated_to():
 
 @autotest
 def prototypes_mixed_with_other_args():
-    o1 = object(a=1, b=4)
+    o1 = prototype(a=1, b=4)
     assert o1._prototypes == (o1,)
-    o2 = object(o1, a=2)
+    o2 = prototype(o1, a=2)
     assert o2._prototypes == (o2, o1), o2._prototypes
-    o3 = object(o2, a=3)
+    o3 = prototype(o2, a=3)
     assert o3._prototypes == (o3, o2, o1)
     assert o1.a == 1
     assert o2.a == 2
@@ -630,7 +565,7 @@ def prototypes_mixed_with_other_args():
     
 @autotest
 def compare_this_to_object():
-    @object
+    @prototype
     def p1():
         prop = 1 + 2
         prak = "aa"
@@ -653,7 +588,7 @@ def compare_this_to_object():
 
 @autotest
 def dispatch_calls_to_next_prototype_in_chain():
-    @object
+    @prototype
     def o0():
         return locals()
     @o0
@@ -675,7 +610,7 @@ def dispatch_calls_to_next_prototype_in_chain():
 def contains_proxied():
     def f(self, a):
         return a in self
-    o = object(f, a=10)
+    o = prototype(f, a=10)
     assert 'a' in o
     assert o.f('a')
     assert not o.f('b')
@@ -685,7 +620,7 @@ def contains_proxied():
 def getitem_proxied():
     def f(self, a):
         return self[a]
-    o = object(f, a=29)
+    o = prototype(f, a=29)
     assert o['a'] == 29
     assert o.f('a') == 29
 
@@ -695,7 +630,7 @@ def equals_proxied_on_self():
         return self
     def f(self, a):
         return self == a and a == self
-    o = object(f, g)
+    o = prototype(f, g)
     assert o == o.g()
     assert o.g() == o
     assert o.f(o)
@@ -705,14 +640,14 @@ def equals_proxied_on_self():
 def iterate_public_attrs():
     def f(self): pass
     def _g(self): pass
-    o = object(f, _g, a=10, _b=20)
+    o = prototype(f, _g, a=10, _b=20)
     assert [('f', f), ('a', 10)], list(o)
 
 @autotest
 def dicts_attrs_become_objects_when_looked_up():
-    o = object(a={'b':{'c':{'d':3}}})
+    o = prototype(a={'b':{'c':{'d':3}}})
     assert o.a.b.c.d == 3, o.a.b.c.d
-    o = object(a={'b':{2:{'d':3}}})
+    o = prototype(a={'b':{2:{'d':3}}})
     assert o.a.b[2].d == 3, o.a.b.c.d
 
 @autotest
@@ -779,12 +714,12 @@ def some_excercises_with_reflection_with_no_real_result():
 
 @autotest
 def use_prototype_as_replacement_for_object():
-    class mythingy(object):
+    class mythingy(prototype):
         a = 42
         def f1(self):
             return self.a
 
-    assert isinstance(mythingy, object)
+    assert isinstance(mythingy, prototype)
     assert isinstance(type(mythingy), meta)
     assert mythingy._prototypes == (mythingy,)
     assert hasattr(mythingy, 'f1' )
@@ -793,7 +728,7 @@ def use_prototype_as_replacement_for_object():
     class m2(mythingy): # this replaces inheritance with delegation
         def f1(self):
             return self.a * 2
-    assert isinstance(m2, object)
+    assert isinstance(m2, prototype)
     assert isinstance(type(m2), meta)
     assert m2._prototypes == (m2, mythingy)
     assert m2.f1() == 84
