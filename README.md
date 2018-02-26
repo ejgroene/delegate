@@ -13,14 +13,14 @@ Instead of a class, each object has a prototype, which is nothing more
 than another object, referenced as `self.next`. This object can also
 have a prototype and so on. All objects in the chain behave the same way.  
 
-Within methods `self` always refers to the object the methods was called
+Within methods `self` always refers to the object the method was called
 on. The object that defined the current method is refered to as `self.this`.
 
 Suppose we have three objects in a chain and `object_b` defines `f`.
 
     object_a.f()         def f(self):
-       \                     return 42
-        \
+         :                   return 42
+         :                  :
         object_a         object_b         object_c
             \_____next_____/ \_____next_____/
 
@@ -51,13 +51,19 @@ All arguments above can be mixed and used at the same time. Given an
 existing object `a`, you can replace `prototype` with `a`. This will let
 the new object delegate to x:
 
-    b = a()                             # equivalent to a = prototype(a)
+    b = a()                             # equivalent to b = prototype(a)
+
+You can mix all the possible initializers as with `prototype()`:
+
+    b = a(c=10, f, g=lambda self: 42, lambda: {'d': 10})
 
 ## Convenient Object Creation:
 
 Old and new style class definitions are convenient to create prototypes
 with several related attributes and methods. All forms create objects
 (instances) not classes. Forget about classes.
+
+Note that all the forms are just other ways to forward to delegate().
 
 ### From Old Style Class Definition
 For old style classes you can use `prototype` or an object as a decorator:
@@ -97,6 +103,7 @@ It is also possible to use `def` to define an initializer function:
     @a                                  # creates b, delegating to a
     def b():
         c = 42
+        return locals()
 
 ## Methods, Self, This and Next
 
@@ -172,8 +179,8 @@ the chain of inheritance.
 
 The chain of creating is roughly: `type -> metaclass -> class -> instance`. Although the
 class-instance relation is easy to use, extending this further requires the use of
-special metaclasses (__metaclass__). So this does not look the same depending on the level,
-and is quite confusing.  
+special metaclasses (`__metaclass__`). So this does not look the same depending on the level,
+and is quite hard to get right.  
 
 The chain of inheritance depends on the base classes you use, which is an orthogonal 
 concept (to the chain of creation). Base classes are what you think of in the first
@@ -200,7 +207,7 @@ The base class of `type` is `object`, and the class of `object` is `type`. Of co
 Now try to think of these two concepts, bases and types, as one in vertical direction and
 the other in the horizontal direction. You now have a 2-dimensional inheritance solution.  
 
-The Python VM calculates an Method Resolution Order (MRO) for each class that takes into account both
+The Python VM calculates a Method Resolution Order (MRO) for each class that takes into account both
 dimensions and gives you an undisputed, consistent (and deterministic) series of bases 
 and types that are visited in order to perform attribute lookup.  
 
