@@ -38,37 +38,37 @@ This scheme will always be the same, on each level.
 The Python class `prototype` creates the objects to work with by calling
 it and supplying initializers: functions, attributes, objects, etc:
 
-    a = object()                         # creates an empty object
-    b = object(a)                        # creates b, delegating to a
-    a = object(c=10)                     # initializes a.c to be 10
-    a = object(lambda: {'b': 10})        # idem
-    a = object(f=lambda self: 42)        # adds method a.f()
+    a = prototype()                     # creates an empty object
+    b = prototype(a)                    # creates b, delegating to a
+    a = prototype(c=10)                 # initializes a.c to be 10
+    a = prototype(lambda: {'b': 10})    # idem
+    a = prototype(f=lambda self: 42)    # adds method a.f()
     def f(self):
         return 42
-    a = object(f)                        # idem
+    a = prototype(f)                    # idem
 
 All arguments above can be mixed and used at the same time. Given an
-existing object `a`, you can replace `object` with `a`. This will let
+existing object `a`, you can replace `prototype` with `a`. This will let
 the new object delegate to x:
 
-    b = a()                              # equivalent to a = object(a)
+    b = a()                             # equivalent to a = prototype(a)
 
-## Convenient object creation:
+## Convenient Object Creation:
 
 Old and new style class definitions are convenient to create prototypes
-with several related attributes and methods. All from create objects
+with several related attributes and methods. All forms create objects
 (instances) not classes. Forget about classes.
 
 ### From Old Style Class Definition
 For old style classes you can use `prototype` or an object as a decorator:
 
     @prototype
-    class a:                             # creates object a
+    class a:                            # creates object a
         c = 10
         def f(self):
             return 42
 
-    @a                                   # creates b, delegating to a
+    @a                                  # creates b, delegating to a
     class b:
         c = 42
 
@@ -76,19 +76,19 @@ For old style classes you can use `prototype` or an object as a decorator:
 For new style classes you can use `prototype` or and object as type in
 your class definition:
 
-    class a(prototype):                  # creates object a
+    class a(prototype):                 # creates object a
         c = 10
         def f(self):
             return 42
 
-    class b(a):                          # creates b, delegating to a
+    class b(a):                         # creates b, delegating to a
         c = 42
 
 ### From Initializers
 It is also possible to use `def` to define an initializer function:
 
-    @object
-    def a():                             # creates a from initializer
+    @prototype
+    def a():                            # creates a from initializer
         c = 10
         def f(self):
             return 42
@@ -103,4 +103,51 @@ It is also possible to use `def` to define an initializer function:
 Any function passed to a prototype during creation is turned into a method.
 The name of the method is derived from the name of the function:
 
-    a = prototype
+    def f(self):
+        return 42
+    a = prototype(f)
+    a.f()                               # returns 42
+
+Alternatively, the name can be given explicitly:
+
+    a = prototype(g=f)
+    a.g()                               # returns 42
+
+This makes it possible to define functions inline with lambda:
+
+    a = prototype(f=lambda self: 42)
+
+### Self
+A function must at least define `self` as the first argument for it to be
+accepted as method. The actual argument will point to the object the method
+is called on, not the object the method is defined on.
+
+###This
+If a function defines `this` as a second argument this argument will be bound
+to the object on which the method is defined. To be precise: the object the
+method is found on during lookup.
+
+###Next
+The attribute `self.next` points to the next delegate in the chain. This is 
+the one just after `this`. This is convenient for if a method refines behaviour
+of another method up in the chain (alas class thinking ;-). You can invoke the
+method you are refining via `self.next`.
+
+###Example
+
+    class top(prototype):
+        a = 16
+        def f(self):
+            return self.a
+        def g(self, this):
+            return this.a
+
+    class middle(top):
+        def f(self):
+            return 2 * self.next.f()
+
+    class bottom(middle):
+        a = 42
+
+    bottom.f()                           # will return 84
+    bottom.g()                           # will return 16
