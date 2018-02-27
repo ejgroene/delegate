@@ -37,23 +37,6 @@ class meta(type):
             return type.__new__(self, name, bases, dct)
         return prototype(**dct)
 
-def constructor(f0, *args0, **kwargs0):
-    if isfunction(f0):
-        def ctor(*args, **kwargs):
-            o = prototype(f0)
-            o[f0.__name__](*args, **kwargs)
-            return o
-        return ctor
-    else:
-        def xyz(f1):
-            def ctor(*args, **kwargs):
-                o = prototype(f1, f0, *args0, **kwargs0)
-                o[f1.__name__](*args, **kwargs)
-                return o
-            return ctor
-        return xyz
-            
-
 
 class prototype(object):
     """ This is the class for all objects. """
@@ -110,6 +93,19 @@ class prototype(object):
     def __repr__(self):           return "prototype"+repr(dict(self.__iter__()))
     def __iter__(self):           return ((k,v) for k,v in \
                                     self.__dict__.iteritems() if not k.startswith('_'))
+
+
+def constructor(*deco_args, **deco_kwargs):
+    def apply_args(func):
+        def ctor(*ctor_args, **ctor_kwargs):
+            obj = prototype(func, *deco_args, **deco_kwargs)
+            obj[func.__name__](*ctor_args, **ctor_kwargs)
+            return obj
+        return ctor
+    if isfunction(deco_args[0]):
+        return apply_args(*deco_args, **deco_kwargs)
+    return apply_args
+            
 
 from autotest import autotest
 
@@ -183,6 +179,28 @@ def alternative_syntax_1():
 @autotest
 def alternative_syntax_2():
 
+    # I don't like this way of creating object. I'd rather replace if with
+    # constructor (see test way below). We could also allow 'prototype' to
+    # be substituted for 'constructor'. And have a more logical way of 
+    # defining similar objects repeatedly. If you do so, you will not add
+    # the methods on each instance, You'd typically only set/calculate some
+    # attributes. So:
+    
+    @prototype
+    class creature:
+      def age(self):
+          return 2016 - self.birth_date
+    
+    @constructor(creature)  # alternatively: @prototype(creature)
+    def Creature(self, legs, birth_date):
+        self.legs = legs
+        self.birth_date = birth_date
+   
+    monkey = Creature(2, 2008)
+    assert monkey.age() == 8
+
+    
+    # here is my initial stuff I want to deprecate
     @prototype
     def creature():
         legs = 4
