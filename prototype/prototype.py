@@ -21,7 +21,7 @@ class Self(object):
     def __getattr__(me, name):
         return me._self.__getattribute__(name, me._prox._prototypes)
 
-    def __setattr__(me, name, val): return setattr(me._prox, name, value)
+    def __setattr__(me, name, val): return setattr(me._prox, name, val)
     def __cmp__(me, rhs):           return cmp(me._prox, rhs)
     def __call__(me, *arg, **kws):  return me._prox(*arg, **kws)
     def __contains__(me, name):     return name in me._prox
@@ -36,6 +36,24 @@ class meta(type):
         if name == 'prototype': #bootstrap
             return type.__new__(self, name, bases, dct)
         return prototype(**dct)
+
+def constructor(f0, *args0, **kwargs0):
+    if isfunction(f0):
+        def ctor(*args, **kwargs):
+            o = prototype(f0)
+            o[f0.__name__](*args, **kwargs)
+            return o
+        return ctor
+    else:
+        def xyz(f1):
+            def ctor(*args, **kwargs):
+                o = prototype(f1, f0, *args0, **kwargs0)
+                o[f1.__name__](*args, **kwargs)
+                return o
+            return ctor
+        return xyz
+            
+
 
 class prototype(object):
     """ This is the class for all objects. """
@@ -736,4 +754,23 @@ def use_prototype_as_replacement_for_object():
     assert m2.f1() == 26
     m2.a = 19
     assert m2.f1() == 38
+
+@autotest
+def something_like_constructor():
+    @constructor
+    def A(self, name, value):
+        self.name = ":" + name
+        self.value = 2 * value
+    a = A("jan", 16)
+    assert a.name == ':jan'
+    assert a.value == 32, a
+
+    @constructor(a, age=56)
+    def B(self, place):
+        self.place = "birth:" + place
+    b = B('here')
+    assert b.name == ':jan', (b, b.name)
+    assert b.value == 32, a
+    assert b.place =='birth:here'
+    assert b.age == 56
 
