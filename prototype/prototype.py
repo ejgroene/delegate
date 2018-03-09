@@ -1,32 +1,39 @@
 from types import FunctionType, MethodType, ClassType
-from inspect import getargspec, isfunction, isclass
+from inspect import getargspec, isfunction, isclass, ismethoddescriptor
 
-class Self(object):
+__set__ = object.__setattr__
+__get__ = object.__getattribute__
+
+class selftype(object):
     """ Instances of this class represent self during method calls in order
         to distinquis between self and this."""
 
+    __slots__ = ('_self', '_this', '_prox')
+
     def __init__(me, self, this, prox=None):
-        object.__setattr__(me, '_self', self)
-        object.__setattr__(me, '_this', this)
-        object.__setattr__(me, '_prox', prox if prox else this)
+        __set__(me, '_self', self)
+        __set__(me, '_this', this)
+        __set__(me, '_prox', prox if prox else this)
 
     @property
     def this(me):
-        return Self(me._self, me._this)
+        return selftype(me._self, me._this)
 
     @property
     def next(me):
-        return Self(me._self, me._this._prototypes[1])
+        return selftype(me._self, me._this._prototypes[1])
 
     def __getattr__(me, name):
         return me._self.__getattribute__(name, me._prox._prototypes)
 
     def __setattr__(me, name, val): return setattr(me._prox, name, val)
     def __cmp__(me, rhs):           return cmp(me._prox, rhs)
+    def __hash__(me):               return hash(me._prox)
     def __call__(me, *arg, **kws):  return me._prox(*arg, **kws)
     def __contains__(me, name):     return name in me._prox
     def __getitem__(me, name):      return me._prox[name]
-    def __repr__(me):               return repr(me._prox)
+    def __repr__(me):               return '*'+repr(me._prox)
+
 
 class meta(type):
     """ This type turns inheritance into delegation for
@@ -43,13 +50,15 @@ class prototype(object):
 
     __metaclass__ = meta
 
-    def __new__(*_, **__):
+    def __new__(cls, *_, **__):
         """ This method turns inheritance into delegation for
               class name(prototype()): """
-        return object.__new__(prototype)
+        if cls.__class__.__name__ == 'prototype':
+            return prototype(cls, *_, **__)
+        return object.__new__(cls)
 
     def __init__(self, *initializers, **attributes):
-        if tuple(type(i) for i in initializers) == (str, tuple, dict):
+        if tuple(type(i) for i in initializers) == (str, tuple, dict): # used as type
             attributes = initializers[2]
             initializers = initializers[1]
         self._prototypes = (self,)
@@ -71,24 +80,31 @@ class prototype(object):
         self.__dict__.update(attributes)
            
     def __getattribute__(self, name, prototypes=None):
-        if name.startswith("_"):
-            return object.__getattribute__(self, name)
+        if name.startswith("_") and name not in ('__init__', '__new__'):
+            return __get__(self, name)
         for this in prototypes or self._prototypes:
             try:
-                attribute = object.__getattribute__(this, name)
-            except AttributeError:
+                attribute = this.__dict__[name] if isinstance(this, prototype) else __get__(this, name)
+            except (KeyError, AttributeError):
                 continue
-            if isfunction(attribute):
-                return MethodType(attribute, Self(self, this, self))
-            if isinstance(attribute, dict):
-                return prototype(self, **dict((str(k),v) for k,v in attribute.iteritems()))
+            if ismethoddescriptor(attribute):
+                attribute = attribute.__get__(this)
+            if isfunction(attribute) and attribute.__name__ != '__new__': # new is always static
+                return MethodType(attribute, selftype(self, this, self))
             return attribute
+        raise AttributeError(name)
 
     def __call__(self, *prototypes_or_functions, **attributes):
+        if hasattr(self, '__new__'):
+            new_obj = self.__new__(self, *prototypes_or_functions, **attributes)
+            if hasattr(new_obj, '__init__'):
+                new_obj.__init__(*prototypes_or_functions, **attributes)
+            return new_obj
         return prototype(self, *prototypes_or_functions, **attributes)
 
     #behave a bit dict'isch
     def __getitem__(self, name):  return getattr(self, str(name)) 
+    def __setitem__(self, nam, v):return setattr(self, str(nam), v)
     def __contains__(self, name): return name in self.__dict__
     def __repr__(self):           return "prototype"+repr(dict(self.__iter__()))
     def __iter__(self):           return ((k,v) for k,v in \
@@ -124,6 +140,28 @@ def simple_object_assembled_manually():
     assert a.f() == a
     b = prototype()
     assert a != b
+
+@autotest
+def objects_in_dict():
+    objs = {}
+    a = prototype(f=lambda self: self)
+    assert not a in objs
+    objs[a] = a
+    assert a in objs
+    a.b = 42
+    assert a in objs
+    assert a.f() in objs
+    assert hash(a) == hash(a.f())
+    assert a == a.f()
+
+
+@autotest
+def avoid_proxies_for_proxies_for_proxies():
+    a = prototype(f=lambda self: self)
+    a1 = a.f().f().f()
+    assert a == a1
+    assert isinstance(a1._prox, prototype)
+
 
 @autotest
 def simple_object_with_old_style_class_syntax():
@@ -526,7 +564,7 @@ def create_object_with_this():
     assert x.b == 43
     assert y.b == 42
     assert x.c == 14
-    assert y.c == None
+    assert hasattr(y,'c') == False
 
 #@autotest
 def private_functions(): # naah
@@ -595,9 +633,9 @@ def prototypes_mixed_with_other_args():
     assert o1.b == 4
     assert o2.b == 4
     assert o2.b == 4
-    assert o1.x == None
-    assert o2.x == None
-    assert o3.x == None
+    assert hasattr(o1,'x') == False
+    assert hasattr(o2,'x') == False
+    assert hasattr(o3,'x') == False
     
 @autotest
 def compare_this_to_object():
@@ -679,12 +717,12 @@ def iterate_public_attrs():
     o = prototype(f, _g, a=10, _b=20)
     assert [('f', f), ('a', 10)], list(o)
 
-@autotest
-def dicts_attrs_become_objects_when_looked_up():
-    o = prototype(a={'b':{'c':{'d':3}}})
-    assert o.a.b.c.d == 3, o.a.b.c.d
-    o = prototype(a={'b':{2:{'d':3}}})
-    assert o.a.b[2].d == 3, o.a.b.c.d
+#@autotest
+#def dicts_attrs_become_objects_when_looked_up():
+#    o = prototype(a={'b':{'c':{'d':3}}})
+#    assert o.a.b.c.d == 3, o.a.b.c.d
+#    o = prototype(a={'b':{2:{'d':3}}})
+#    assert o.a.b[2].d == 3, o.a.b.c.d
 
 @autotest
 def some_excercises_with_reflection_with_no_real_result():
@@ -792,3 +830,44 @@ def something_like_constructor():
     assert b.place =='birth:here'
     assert b.age == 56
 
+@autotest
+def could__init__and__new__work():
+
+    def dotest(base):
+        class A(base):
+            instances = {}
+            a = 21
+            def __new__(self, *a, **k):
+                if not self in self.instances:
+                    self.instances[self] = base.__new__(self)
+                return self.instances[self]
+            def __init__(self, b=11):
+                self.b = b
+        assert A.a == 21
+        assert not hasattr(A, 'b')
+        assert hasattr(A, '__init__')
+
+        a = A()
+        assert a.a == 21
+        assert a.b == 11
+        assert hasattr(a, '__init__')
+        a1 = A()
+        assert a1 == a, (a1, a, id(a1), id(a))
+
+        class B(A):
+            a = 22
+        assert B.a == 22
+        assert not hasattr(B, 'b')
+        assert hasattr(B, '__init__')
+
+        b = B(31)
+        assert b.a == 22, b.a
+        assert b.b == 31
+        assert hasattr(b, '__init__')
+        b1 = B()
+        assert b1 == b # is will not work for prototyping
+
+    dotest(object)
+    dotest(prototype)
+    dotest(prototype(prototype))
+    dotest(prototype())
