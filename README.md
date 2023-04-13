@@ -1,6 +1,9 @@
 # Delegate
 True delegation in Python
 
+*This version works for Python 2. A new version for Python 3 is in the making.*
+
+
 # Introduction
 
 This module defines `prototype` which replaces inheritance with delegation.
