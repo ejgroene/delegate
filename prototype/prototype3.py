@@ -1,4 +1,4 @@
-from inspect import signature, isfunction
+from inspect import isfunction
 
 def _f(): pass
 function = type(_f)
@@ -15,100 +15,101 @@ test = get_tester(__name__)
 """
 
 
-class method:
-    # A function bound to a 'self' and a 'this'.
-
-    def __init__(me, function, self, this):
-        me.__func__ = function   # Horribly ugly: it follows Pythons descriptor model, which is
-        me.__self__ = self       #   undone in lookup.
-        me._this = this
-        me._signature = signature(function)
-
-    def __call__(me, *args, **kwargs):
-        signature = me._signature
-        parameters = signature.parameters
-        if 'super' in parameters:
-            args = me, *args
-        if 'this' in parameters:
-            args = me._this, *args
-        if 'self' in parameters:
-            args = me.__self__, *args
-        elif 'cls' in parameters:  # for delegation to classmethods
-            args = me._this, *args
-        binding = signature.bind(*args, **kwargs)
-        binding.apply_defaults()
-        return me.__func__(*binding.args, **binding.kwargs)
-
-    def __getattr__(me, name):
-        attr, this = me._this.lookup(name)
-        return method(attr, me.__self__, this)
-
-
 class meta(type):
-    """ This type turns inheritance into delegation for
-          class name(prototype):
-    """
+    """ This type turns inheritance into delegation for "class name(prototype):" """
+
     def __new__(self, name, bases, attributes):
         if name == 'prototype': #bootstrap
             return type.__new__(self, name, bases, attributes)
         return prototype(**attributes)
 
 
+
+class method:
+    """ A function bound to a 'self' and a 'this'. """
+
+    def __init__(me, function, self, this):
+        me._func = function 
+        me._self = self
+        me._this = this
+        me._arg_names = function.__code__.co_varnames
+
+
+    def __call__(me, *args, **kwargs):
+        """ call function(self, this, super, *args, **kwargs) """
+        arg_names = me._arg_names
+        if 'super' in arg_names:   # if present, must be last
+            args = me, *args
+        if 'this' in arg_names:    # if present, must be in the middle
+            args = me._this, *args
+        if 'self' in arg_names:    # if present, must be first
+            args = me._self, *args
+        elif 'cls' in arg_names:   # if present, must be first
+            args = me._this, *args
+        return me._func(*args, **kwargs)
+
+
+    def __getattr__(me, name):
+        """ support for 'super' """
+        attr, this = me._this.lookup_parents(name)
+        return method(attr, me._self, this)
+
+
+
 class prototype(metaclass=meta):
-    # The type of all objects
+    """ The type of all objects """
 
     def __new__(cls, *initializers, **__):
-        """ This method turns inheritance into delegation for
-              class name(prototype()):
-        """
-        if tuple(type(i) for i in initializers) == (str, tuple, dict): # prototype used as type
+        """ This method turns inheritance into delegation for "class name(prototype()):" """
+        if tuple(map(type, initializers)) == (str, tuple, dict): # prototype used as type
             name, bases, attributes = initializers
-            if all(isinstance(b, prototype) for b in bases):
-                return prototype(*bases, **attributes)
-            raise TypeError(f"Cannot mix prototypes with classes.")
+            return prototype(*bases, **attributes)
         return object.__new__(cls)
 
+
     def __init__(me, *parents, **attributes):
-        if hasattr(me, '_parents'):
-            return # already initialized in __new__
-        me._parents = tuple(p for p in parents if not isfunction(p))
-        me.__dict__.update(attributes)
-        for f in parents:
-            if isfunction(f):
-                me.__dict__[f.__name__] = f
+        if not hasattr(me, '_parents'):
+            me._parents = tuple(p for p in parents if not isfunction(p))
+            me.__dict__.update(attributes)
+            me.__dict__.update((f.__name__, f) for f in parents if isfunction(f))
+
 
     def __getattribute__(me, name):
-        if name in {'__dict__', '_parents', 'lookup'}:
+        if name in {'__dict__', '_parents', 'lookup', 'lookup_parents'}:
             return object.__getattribute__(me, name)
 
-        this = me
-        try:
-            attr = me.__dict__[name]
-        except KeyError:
-            attr, this = me.lookup(name)
+        attr, this = me.lookup(name)
         if isfunction(attr):
             return method(attr, me, this)
         return attr
 
+
     def __call__(me, *parents, **attributes):
         return prototype(me, *parents, **attributes)
 
-
+    
     def lookup(me, name):
+        try:
+            return me.__dict__[name], me
+        except KeyError:
+            return me.lookup_parents(name)
+
+
+    def lookup_parents(me, name):
         for this in me._parents:
-            #if isinstance(this, prototype):
-            #    try:
-            #        attr = this.__dict__[name]
-            #    except KeyError:
-            #        continue
-            #else:
-            try:
-                attr = getattr(this, name)
-            except AttributeError:
-                continue
-            if hasattr(attr, '__func__'):
-                this = attr.__self__
-                attr = attr.__func__
+            if isinstance(this, prototype):
+                try:
+                    return this.lookup(name)
+                except AttributeError:
+                    continue
+            else: # support Python classes and objects
+                try:
+                    attr = getattr(this, name)
+                except AttributeError:
+                    continue
+                if hasattr(attr, '__func__'): # undo descriptors
+                    this = attr.__self__
+                    attr = attr.__func__
             return attr, this
         else:
             raise AttributeError(name)
