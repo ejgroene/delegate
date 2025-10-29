@@ -25,10 +25,10 @@ class method:
         me._signature = signature(function)
 
     def __call__(me, *args, **kwargs):
-        if isinstance(me._this, prototype):
-            me._this.resend = lookup(me.__self__, me._this._parents)
         signature = me._signature
         parameters = signature.parameters
+        if 'super' in parameters:
+            args = me, *args
         if 'this' in parameters:
             args = me._this, *args
         if 'self' in parameters:
@@ -38,6 +38,10 @@ class method:
         binding = signature.bind(*args, **kwargs)
         binding.apply_defaults()
         return me.__func__(*binding.args, **binding.kwargs)
+
+    def __getattr__(me, name):
+        attr, this = me._this.lookup(name)
+        return method(attr, me.__self__, this)
 
 
 class meta(type):
@@ -74,48 +78,41 @@ class prototype(metaclass=meta):
                 me.__dict__[f.__name__] = f
 
     def __getattribute__(me, name):
-        if name in {'__dict__', '_parents', 'resend'}:
+        if name in {'__dict__', '_parents', 'lookup'}:
             return object.__getattribute__(me, name)
 
+        this = me
         try:
             attr = me.__dict__[name]
         except KeyError:
-            return getattr(lookup(me, me._parents), name) # me as self is not always correct
-        else:
-            if isfunction(attr):
-                return method(attr, me, me)
-            return attr
+            attr, this = me.lookup(name)
+        if isfunction(attr):
+            return method(attr, me, this)
+        return attr
 
     def __call__(me, *parents, **attributes):
         return prototype(me, *parents, **attributes)
 
 
-class lookup:
-    # Attribute lookup on parents
-
-    def __init__(me, self, parents):
-        me._self = self
-        me._parents = parents
-
-    def __getattr__(me, name):
+    def lookup(me, name):
         for this in me._parents:
+            #if isinstance(this, prototype):
+            #    try:
+            #        attr = this.__dict__[name]
+            #    except KeyError:
+            #        continue
+            #else:
             try:
-                attr = getattr(this, name)  # we need this to lookup attributes in classes
+                attr = getattr(this, name)
             except AttributeError:
                 continue
             if hasattr(attr, '__func__'):
-                # remove descriptors such as staticmethod and classmethod
-                # and (o horror!) also our own method object
                 this = attr.__self__
                 attr = attr.__func__
-            if isfunction(attr):
-                # we must supply the right self here, that is why we cannot
-                # use the method object created by our own __getattribute__.
-                return method(attr, me._self, this)
-            return attr
+            return attr, this
         else:
             raise AttributeError(name)
-
+                
 
 @test
 def create_prototype():
@@ -296,29 +293,29 @@ def delegate_to_python_subclass_object():
 
 
 @test
-def resend_to_prototype():
+def super_to_prototype():
     # Self-like resend
     a = prototype(f=lambda n: n * 3)
-    b = prototype(a, f=lambda self, this, n: 2 * this.resend.f(n))
+    b = prototype(a, f=lambda self, super, n: 2 * super.f(n))
     test.eq(30, b.f(5))
 
 
 @test
-def resend_to_class():
+def super_to_class():
     class F:
         def f(self, n):
             return n * 3
-    b = prototype(F, f=lambda self, this, n: 2 * this.resend.f(n))
+    b = prototype(F, f=lambda self, super, n: 2 * super.f(n))
     test.eq(30, b.f(5))
 
 
 @test
-def resend_to_object():
+def super_to_object():
     class F:
         def f(self, n):
             return n * 3
     f = F()
-    b = prototype(f, f=lambda self, this, n: 2 * this.resend.f(n))
+    b = prototype(f, f=lambda self, super, n: 2 * super.f(n))
     test.eq(30, b.f(5))
 
 
@@ -366,8 +363,8 @@ def you_could_even_inherit_from_eh_delegate_to_an_object():
     a = prototype(a=3, f=lambda: 16)
     class b(a):
         b = 2
-        def f(this):
-            return 2 * this.resend.f()
+        def f(super):
+            return 2 * super.f()
     test.isinstance(b, prototype)
     test.eq((a,), b._parents)
     test.eq(3, b.a)
@@ -394,8 +391,8 @@ def doc_example():
             return this.a
 
     class middle(top):
-        def f(this):
-            return 2 * this.resend.f()
+        def f(super):
+            return 2 * super.f()
 
     class bottom(middle):
         a = 42
