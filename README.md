@@ -1,23 +1,26 @@
 # Delegate
 True delegation in Python
 
-*This version works for Python 2. A new version for Python 3 is in the making.*
-
+The old Python 2 version is no longer maintained.
+The Python 3 version is completely rewritten and much simpler.
 
 # Introduction
 
 This module defines `prototype` which replaces inheritance with delegation.
 It solves the 'self-problem' by using a single lineair delegate list. This
 list of delegates is traversed when looking up attributes. This happens in
-the same way, always and everywhere: object, type, class, classmethod,
-staticmethod, metaclass, meta-meta-metaclass made easy!  
+the same way, always and everywhere. There is no distinction between object,
+type, class, classmethod, staticmethod, metaclass or metaclass.
 
-Instead of a class, each object has a prototype, which is nothing more
-than another object, referenced as `self.next`. This object can also
-have a prototype and so on. All objects in the chain behave the same way.  
+It is very instructional to play it so you learn how complicated Python has
+become and easy it can be.
+
+Instead of a class, each object has prototypes called `parents`, which are 
+nothing more than other objects. These objects can also have parents and so on.
+All objects in the chain behave in the same way.
 
 Within methods `self` always refers to the object the method was called
-on. The object that defined the current method is refered to as `self.this`.
+on. The object that defined the current method is refered to as `this`.
 
 Suppose we have three objects in a chain and `object_b` defines `f`.
 
@@ -25,13 +28,13 @@ Suppose we have three objects in a chain and `object_b` defines `f`.
          :                   return 42
          :                  :
         object_a         object_b         object_c
-            \_____next_____/ \_____next_____/
+            \____parent____/ \____parent____/
 
-         self            self.this        self.next
+         self              this        resend
 
 When we call `object_a.f()`, `f` will be found on `object_b` and executed 
-with `self` bound to `object_a`, `self.this` bound to `object_b` and `self.next` 
-pointing to `object_c`.  
+with `self` bound to `object_a`, `this` bound to `object_b`. `resend` allows
+a method to (re-) send messages to its own parents.
 
 This scheme will always be the same, on each level.
 
@@ -44,7 +47,6 @@ it and supplying initializers: functions, attributes, objects, etc:
     a = prototype()                     # creates an empty object
     b = prototype(a)                    # creates b, delegating to a
     a = prototype(c=10)                 # initializes a.c to be 10
-    a = prototype(lambda: {'b': 10})    # idem
     a = prototype(f=lambda self: 42)    # adds method a.f()
     def f(self):
         return 42
@@ -58,31 +60,12 @@ the new object delegate to x:
 
 You can mix all the possible initializers as with `prototype()`:
 
-    b = a(c=10, f, g=lambda self: 42, lambda: {'d': 10})
+    b = a(c=10, f, g=lambda self: 42)
+
 
 ## Convenient Object Creation:
 
-Old and new style class definitions are convenient to create prototypes
-with several related attributes and methods. All forms create objects
-(instances) not classes. Forget about classes.
-
-Note that all the forms are just other ways to forward to delegate().
-
-### From Old Style Class Definition
-For old style classes you can use `prototype` or an object as a decorator:
-
-    @prototype
-    class a:                            # creates object a
-        c = 10
-        def f(self):
-            return 42
-
-    @a                                  # creates b, delegating to a
-    class b:
-        c = 42
-
-### From New Style Class Definition
-For new style classes you can use `prototype` or and object as type in
+For new style classes you can use `prototype` or an object as type in
 your class definition:
 
     class a(prototype):                 # creates object a
@@ -93,22 +76,10 @@ your class definition:
     class b(a):                         # creates b, delegating to a
         c = 42
 
-### From Initializers
-It is also possible to use `def` to define an initializer function:
+    class c(b):                         # creates c, delegating to b
+        pass
 
-    @prototype
-    def a():                            # creates a from initializer
-        c = 10
-        def f(self):
-            return 42
-        return locals()
-
-    @a                                  # creates b, delegating to a
-    def b():
-        c = 42
-        return locals()
-
-## Methods, Self, This and Next
+## Methods, Self, This and Resend
 
 Any function passed to a prototype during creation is turned into a method.
 The name of the method is derived from the name of the function:
@@ -128,19 +99,22 @@ This makes it possible to define functions inline with lambda:
     a = prototype(f=lambda self: 42)
 
 ### Self
-A function must at least define `self` as the first argument for it to be
-accepted as method. The actual argument will point to the object the method
-is called on, not the object the method is defined on.
+If a function declares a formal parameter `self`, the actual parameter will
+be the object the method lookup is performed. If there is no formal parameter
+`self`, it will not be passed.
 
 ### This
-A method can use `self.this` to refer to the object on which the method is
-defined. To be precise: the object the method is found on during lookup.
+If a function declares a formal parameter `this`, the actual parameter will
+be the object the method is found. If there is no formal parameter
+`this`, it will not be passed.
 
-### Next
-The attribute `self.next` points to the next delegate in the chain. This is 
-the one just after `self.this`. This is convenient for if a method refines behaviour
-of another method up in the chain (alas class thinking ;-). You can invoke the
-method you are refining via `self.next`.
+Both `self` and `this` may be declared, in that order.
+
+### Resend
+Every object has an attribute that can be used to delegate to the parents.
+This is convenient for if a method refines behaviour of another method up in
+the chain of parents. You can invoke the method you are refining using
+`this.resend.<method>(...)`.
 
 ### Example
 
@@ -148,18 +122,18 @@ method you are refining via `self.next`.
         a = 16
         def f(self):
             return self.a
-        def g(self):
-            return self.this.a
+        def g(this):
+            return this.a
 
     class middle(top):
-        def f(self):
-            return 2 * self.next.f()
+        def f(this):
+            return 2 * this.resend.f()
 
     class bottom(middle):
         a = 42
 
     bottom.f()                           # will return 84
-    bottom.g()                           # will return 16
+    bottom.g()                           # will return 32
 
 ### Closing Remarks
 Delegation is formally a more general concept than inheritance. You can build
