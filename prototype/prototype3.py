@@ -26,7 +26,7 @@ class meta(type):
 
 
 class method:
-    """ A function bound to a 'self' and a 'this'. """
+    """ A function bound to a 'self' and a 'this'. Doubles as 'super'"""
 
     def __init__(me, function, self, this):
         me._func = function 
@@ -84,8 +84,13 @@ class prototype(metaclass=meta):
         return attr
 
 
-    def __call__(me, *parents, **attributes):
-        return prototype(me, *parents, **attributes)
+    def __call__(me, *args, **kwargs):
+        try:
+            f, this = me.lookup('__call__')
+        except AttributeError:
+            return prototype(me, *args, **kwargs)
+        else:
+            return method(f, me, this)(*args, **kwargs)
 
     
     def lookup(me, name):
@@ -114,6 +119,18 @@ class prototype(metaclass=meta):
         else:
             raise AttributeError(name)
                 
+
+    def __getitem__(me, name):
+        return me.__dict__[name]
+
+
+    def __iter__(me):
+        return (k for k in me.__dict__ if k[0] != '_')
+
+
+    def __repr__(me):
+        return '[' + ', '.join(f"{k} = {me[k]}" for k in me) + ']'
+
 
 @test
 def create_prototype():
@@ -401,3 +418,47 @@ def doc_example():
     test.eq(42, bottom.a)
     test.eq(84, bottom.f())                          # will return 84
     test.eq(16, bottom.g())                          # will return 16
+
+
+@test
+def sensible_iter():
+    p = prototype()
+    test.eq([], list(iter(p)))
+    p = prototype(a=1, f=lambda: None)
+    test.eq(['a', 'f'], list(iter(p)))
+
+
+
+@test
+def sensible_repr():
+    p = prototype()
+    test.eq('[]', repr(p))
+    test.eq('[]', str(p))
+    p = prototype(a=1)
+    test.eq('[a = 1]', repr(p))
+    p = prototype(a=1, f=lambda: None)
+    test.eq(f'[a = 1, f = <function sensible_repr.<locals>.<lambda> at 0x{id(p.f._func):x}>]', repr(p))
+    def f(): pass
+    p = prototype(f, a=1)
+    test.eq(f'[a = 1, f = <function sensible_repr.<locals>.f at 0x{id(p.f._func):x}>]', repr(p))
+
+
+
+@test
+def dunder_methods():
+    def f(n):
+        return 2 * n
+    a = prototype(__call__=f)
+    test.eq((f, a), a.lookup('__call__'))
+    test.eq(42, a(21))
+
+    def g(self, this, super, n):
+        return self, this, super
+    b = prototype(a, __call__=g)
+    test.eq((g, b), b.lookup('__call__'))
+
+    # resending does not work yet, I am unsure if I want to fix this.
+    self, this, super = b(21)
+    #test.eq(f, super.__call__)
+    #test.eq((b, b, 42), b(21))
+
