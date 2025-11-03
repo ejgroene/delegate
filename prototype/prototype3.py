@@ -49,8 +49,10 @@ class method:
         return me._func(*args, **kwargs)
 
 
-    def __getattr__(me, name):
+    def __getattribute__(me, name):
         """ support for 'super' """
+        if name in {'_func', '_self', '_this', '_arg_names'}:
+            return object.__getattribute__(me, name)
         attr, this = me._this.lookup_parents(name)
         return method(attr, me._self, this)
 
@@ -75,7 +77,7 @@ class prototype(metaclass=meta):
 
 
     def __getattribute__(me, name):
-        if name in {'__dict__', '_parents', 'lookup', 'lookup_parents'}:
+        if name in {'__dict__', '_parents', 'lookup', 'lookup_parents', '_call_dunder'}:
             return object.__getattribute__(me, name)
 
         attr, this = me.lookup(name)
@@ -92,7 +94,22 @@ class prototype(metaclass=meta):
         else:
             return method(f, me, this)(*args, **kwargs)
 
-    
+
+    def _call_dunder(me, name, *args, **kwargs):
+        try:
+            f, this = me.lookup(name)
+        except AttributeError:
+            return getattr(object, name)(me, *args, **kwargs)
+        return method(f, me, this)(*args, **kwargs)
+        
+    def __eq__(me, rhs):
+        return me._call_dunder('__eq__', rhs)
+
+
+    def __hash__(me):
+        return me._call_dunder('__hash__')
+
+
     def lookup(me, name):
         try:
             return me.__dict__[name], me
@@ -443,22 +460,87 @@ def sensible_repr():
     test.eq(f'[a = 1, f = <function sensible_repr.<locals>.f at 0x{id(p.f._func):x}>]', repr(p))
 
 
+@test
+def lookup_dunder():
+    class A:
+        def __call__(self):
+            return 27
+        def __getattribute__(self, name):
+            return 42
+    a = A()
+    # Python looks up __ methods on the class, skipping the objects __getattribute__
+    test.eq(27, a())
+    # Explicit dereferencing does invoke __getattribute__; useful for super/resend
+    test.eq(42, a.__call__)
+    # (__getattr__ works as expected)
+
 
 @test
-def dunder_methods():
-    def f(n):
+def dunder_method__call__():
+    def a_call(n):
         return 2 * n
-    a = prototype(__call__=f)
-    test.eq((f, a), a.lookup('__call__'))
+
+    a = prototype(__call__=a_call)
+
+    test.isinstance(a.__call__, method)
+    test.eq(a_call, a.__call__._func)
+    test.eq((a_call, a), a.lookup('__call__'))
     test.eq(42, a(21))
 
-    def g(self, this, super, n):
-        return self, this, super
-    b = prototype(a, __call__=g)
-    test.eq((g, b), b.lookup('__call__'))
+    def b_call(self, this, super, n):
+        return self, this, super, super.__call__(n)
 
-    # resending does not work yet, I am unsure if I want to fix this.
-    self, this, super = b(21)
-    #test.eq(f, super.__call__)
-    #test.eq((b, b, 42), b(21))
+    b = prototype(a, __call__=b_call)
 
+    test.isinstance(b.__call__, method)
+    test.eq(b_call, b.__call__._func)
+    test.eq((b_call, b), b.lookup('__call__'))
+    self, this, super, n = b(21)
+    test.eq(42, n)
+
+
+@test
+def dunder_method__eq__():
+    def a_eq(self, rhs):
+        return self.x == rhs.x
+    def a_hash(self):
+        return hash(self.x)
+    a = prototype(__eq__=a_eq, __hash__=a_hash, x=None)
+    test.eq(a_eq, a.__eq__._func)
+    test.eq(a_hash, a.__hash__._func)
+    b = prototype(a, x=3)
+    c = prototype(a, x=4)
+    d = prototype(a, x=3)
+    test.eq(a, a)
+    test.ne(a, b)
+    test.ne(hash(a), hash(b))
+    test.ne(b, a)
+    test.ne(a, c)
+    test.ne(hash(a), hash(c))
+    test.ne(c, a)
+    test.eq(b, d)
+    test.eq(d, b)
+    test.eq(hash(b), hash(d))
+
+
+@test
+def dunder_method__eq__via_class():
+    class a(prototype):
+        x = None
+        def __eq__(self, rhs):
+            return self.x == rhs.x
+        def __hash__(self):
+            return hash(self.x)
+    b = prototype(a, x=3)
+    c = prototype(a, x=4)
+    d = prototype(a, x=3)
+    test.eq(a, a)
+    test.ne(a, b)
+    test.ne(hash(a), hash(b))
+    test.ne(b, a)
+    test.ne(a, c)
+    test.ne(hash(a), hash(c))
+    test.ne(c, a)
+    test.eq(b, d)
+    test.eq(d, b)
+    test.eq(hash(b), hash(d))
