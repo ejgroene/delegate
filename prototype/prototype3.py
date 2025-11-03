@@ -61,11 +61,11 @@ class method:
 class prototype(metaclass=meta):
     """ The type of all objects """
 
-    def __new__(cls, *initializers, **__):
+    def __new__(cls, *type_initializers, **__):
         """ This method turns inheritance into delegation for "class name(prototype()):" """
-        if tuple(map(type, initializers)) == (str, tuple, dict): # prototype used as type
-            name, bases, attributes = initializers
-            return prototype(*bases, **attributes)
+        if tuple(map(type, type_initializers)) == (str, tuple, dict): # prototype used as type
+            name, bases, attributes = type_initializers
+            return prototype(*bases, __name__=name, **attributes)
         return object.__new__(cls)
 
 
@@ -77,7 +77,7 @@ class prototype(metaclass=meta):
 
 
     def __getattribute__(me, name):
-        if name in {'__dict__', '_parents', 'lookup', 'lookup_parents', '_call_dunder'}:
+        if name in {'__dict__', '_parents', 'lookup', 'lookup_parents', '_call_dunder', 'get'}:
             return object.__getattribute__(me, name)
 
         attr, this = me.lookup(name)
@@ -96,12 +96,16 @@ class prototype(metaclass=meta):
 
 
     def _call_dunder(me, name, *args, **kwargs):
+        """ Looks up __dunder__ method in the instance (prototype)
+            before falling back to the class (as Python does by default)
+        """
         try:
             f, this = me.lookup(name)
         except AttributeError:
             return getattr(object, name)(me, *args, **kwargs)
         return method(f, me, this)(*args, **kwargs)
-        
+
+
     def __eq__(me, rhs):
         return me._call_dunder('__eq__', rhs)
 
@@ -111,6 +115,7 @@ class prototype(metaclass=meta):
 
 
     def lookup(me, name):
+        """ Look up attribute in instance dict and then in the parents. """
         try:
             return me.__dict__[name], me
         except KeyError:
@@ -118,6 +123,7 @@ class prototype(metaclass=meta):
 
 
     def lookup_parents(me, name):
+        """ Depth (height) first lookup of attribute in the parents. """
         for this in me._parents:
             if isinstance(this, prototype):
                 try:
@@ -135,7 +141,10 @@ class prototype(metaclass=meta):
             return attr, this
         else:
             raise AttributeError(name)
-                
+
+
+    def get(me, name, default=None):
+        return me.__dict__.get(name, default)
 
     def __getitem__(me, name):
         return me.__dict__[name]
@@ -146,7 +155,7 @@ class prototype(metaclass=meta):
 
 
     def __repr__(me):
-        return '[' + ', '.join(f"{k} = {me[k]}" for k in me) + ']'
+        return f"{me.get('__name__','')}[" + ', '.join(f"{k} = {me[k]}" for k in me) + ']'
 
 
 @test
@@ -405,6 +414,7 @@ def you_could_even_inherit_from_eh_delegate_to_an_object():
     test.eq(3, b.a)
     test.eq(2, b.b)
     test.eq(32, b.f())
+    test.eq('b', b.__name__)
 
    
 @test
@@ -458,6 +468,8 @@ def sensible_repr():
     def f(): pass
     p = prototype(f, a=1)
     test.eq(f'[a = 1, f = <function sensible_repr.<locals>.f at 0x{id(p.f._func):x}>]', repr(p))
+    p = prototype(__name__='yes', a=2)
+    test.eq('yes[a = 2]', str(p))
 
 
 @test
