@@ -556,3 +556,53 @@ def dunder_method__eq__via_class():
     test.eq(b, d)
     test.eq(d, b)
     test.eq(hash(b), hash(d))
+
+
+@test
+def assignments():
+    a = prototype(x = 1, y = 3)
+    b = prototype(a, x = 2)
+    test.eq(1, a.x)
+    test.eq(2, b.x)
+    test.eq(3, a.y)
+    test.eq(3, b.y)
+    b.y = 6
+    test.eq(3, a.y)
+    test.eq(6, b.y)
+    #b['y'] = 9
+    #test.eq(9, a.y)
+    #test.eq(9, b.y)
+
+
+# TODO directed resend: this[<parent>].<method>(...)
+#      how to refer to parent? Index, name, ...?
+
+# TODO cyclde detection during lookup
+
+# TODO find ambiguous attributes (by finding them all and not short circuit on the first hit)
+
+# TODO parent priorities?
+
+
+@test
+def diamond():
+    class a(prototype):
+        x = 0
+        y = 0
+        def product(self):
+            return self.x * self.y
+
+    class b(a):
+        x = 5
+
+    class c(a):
+        y = 3
+
+    class d(b, c):
+        pass
+
+    class e(c, b):
+        pass
+
+    test.eq(15, d.product())
+    test.eq( 6, e.product())
