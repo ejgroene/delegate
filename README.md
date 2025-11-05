@@ -78,4 +78,4 @@ It is also possible to write:
 This creates exactly the same *object* `a` as above. For prototype objects that are to be used as parent, defining them using `class` syntax isn't too much a stretch.  You can also think of it as a desecration, but then you probably wouldn't be here.  Anyway, it shows how powerful Python is.
 
 ### Where Next?
-If you are interested, it is best to look at the in-source unit tests in main file: [prototype.py](../prototype/prototype.py). These contain all the working ways to create objects.
+If you are interested, it is best to look at the in-source unit tests in main file: [prototype.py](./prototype.py). These contain all the working ways to create objects.
