@@ -117,13 +117,12 @@ class prototype(metaclass=meta):
 
 
     def lookup(me, name, skip=None):
-        """ Depth (height) first lookup of attribute in the parents. """
+        """ C3 linearized lookup of attribute in the parents. """
         for this in linearize(me):
-            if id(this) == id(skip):
+            if this is skip:
                 continue
             if isinstance(this, prototype):
                 try:
-                    #return this.lookup(name)
                     return this.__dict__[name], this
                 except KeyError:
                     continue
