@@ -599,48 +599,50 @@ def assignments():
 # TODO directed resend: this[<parent>].<method>(...)
 #      how to refer to parent? Index, name, ...?
 
-@test
-def C3_liniarization():
-    O = object
-    test.eq([O], linearize(O))
+
+def define_diamonds(O):
     class A(O): pass
-    test.eq([A, O], linearize(A))
     class B(O): pass
     class C(O): pass
     class D(O): pass
     class E(O): pass
     class K1(C, A, B): pass
+    class K2(B, D, E): pass
+    class K3(A, D): pass
+    class Z(K1, K3, K2): pass
+    return O, A, B, C, D, E, K1, K2, K3, Z
+
+
+def verify_linearization(O, A, B, C, D, E, K1, K2, K3, Z):
+    test.eq([O], linearize(O))
+    test.eq([A, O], linearize(A))
     test.eq([K1, C, A, B, O], linearize(K1), diff=test.diff)
+    test.eq([K2, B, D, E, O], linearize(K2), diff=test.diff)
+    test.eq([K3, A, D, O], linearize(K3), diff=test.diff)
+    test.eq([Z, K1, C, K3, A, K2, B, D, E, O], linearize(Z), diff=test.diff)
+
+
+@test
+def C3_linearization_with_classes():
+    # https://handwiki.org/wiki/C3_linearization
+    O, A, B, C, D, E, K1, K2, K3, Z = define_diamonds(object)
+    verify_linearization(O, A, B, C, D, E, K1, K2, K3, Z)
+
+    test.eq( O.mro(), linearize( O), diff=test.diff)
+    test.eq( A.mro(), linearize( A), diff=test.diff)
+    test.eq( B.mro(), linearize( B), diff=test.diff)
+    test.eq( C.mro(), linearize( C), diff=test.diff)
+    test.eq( E.mro(), linearize( E), diff=test.diff)
     test.eq(K1.mro(), linearize(K1), diff=test.diff)
-    class K2(B, D, E): pass
-    test.eq([K2, B, D, E, O], linearize(K2))
     test.eq(K2.mro(), linearize(K2), diff=test.diff)
-    class K3(A, D): pass
-    test.eq([K3, A, D, O], linearize(K3))
     test.eq(K3.mro(), linearize(K3), diff=test.diff)
-    class Z(K1, K3, K2): pass
-    test.eq(Z.mro(), linearize(Z), diff=test.diff)
-    test.eq([Z, K1, C, K3, A, K2, B, D, E, O], linearize(Z), diff=test.diff)
+    test.eq( Z.mro(), linearize( Z), diff=test.diff)
 
 
 @test
-def C3_liniarization_with_prototypes():
-    O = prototype()
-    test.eq([O], linearize(O))
-    class A(O): pass
-    test.eq([A, O], linearize(A))
-    class B(O): pass
-    class C(O): pass
-    class D(O): pass
-    class E(O): pass
-    class K1(C, A, B): pass
-    test.eq([K1, C, A, B, O], linearize(K1), diff=test.diff)
-    class K2(B, D, E): pass
-    test.eq([K2, B, D, E, O], linearize(K2))
-    class K3(A, D): pass
-    test.eq([K3, A, D, O], linearize(K3))
-    class Z(K1, K3, K2): pass
-    test.eq([Z, K1, C, K3, A, K2, B, D, E, O], linearize(Z), diff=test.diff)
+def C3_linearization_with_prototypes():
+    O, A, B, C, D, E, K1, K2, K3, Z = define_diamonds(prototype())
+    verify_linearization(O, A, B, C, D, E, K1, K2, K3, Z)
 
 
 @test
