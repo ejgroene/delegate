@@ -2,6 +2,7 @@
 
 True delegation in Python 3.
 
+
 ### Inheritance vs Delegation
 
 Inheritance based on objects is simpler and more powerful than using classes.
@@ -16,6 +17,7 @@ Simplicity comes from three facts:
 What one would call a class method or static method is really just a method call on another object. Every method invocation behaves the same.
 
 SELF was an inspiration for my mini-project, but I do not try to replicate the SELF lookup algorithms. These come with their own problems, and I want to stick to Python a bit more.
+
 
 ### An Example
 
@@ -35,13 +37,18 @@ OK, now let's look at an example:
 
 Here we create the objects `a`, `b`, `c` and `d`. Objects `b` and `c` have parent `a`, while `d` has two parents `b` and `c`. We'll introduce other syntax for this later.
 
+
 ### All Object are Equal
 
 The first thing to note is that all objects are really equal. In Python a class is also an object but it is very special in many ways. This leads to difficult concepts such as classmethods, staticmethods and metaclasses. These distinctions do not exist in prototyping. Instead these concepts are all mapped to the trivally simple concept of method lookup.
 
+
 ### Lookup
 
-Method lookup in delegation is a very straightforward process. The lookup for `area` starts with the object `d`. If it is not there, it is looked up in the parents, following the chain up until there are no more parents. The process is depth-first.  One could argue that breadth-first is more natural, and would solve at least the most intuitive instances of the [Diamond Problem](https://en.wikipedia.org/wiki/Multiple_inheritance). Breadth-first could be akin to the "children before parents" idea, and could provide a simplest-thing-that-could-possibly-work implementation, but I need to do more research first.
+Method lookup in delegation is a very straightforward process. It makes a dependency graph from all the parents and traverses that in static order, see [Python graphlib](https://docs.python.org/3/library/graphlib.html).
+
+This coincidentally is equivalent to the C3 linearization algorithm that Python uses for method lookup.
+
 
 ### Binding self, this and super
 
@@ -77,5 +84,7 @@ It is also possible to write:
 
 This creates exactly the same *object* `a` as above. For prototype objects that are to be used as parent, defining them using `class` syntax isn't too much a stretch.  You can also think of it as a desecration, but then you probably wouldn't be here.  Anyway, it shows how powerful Python is.
 
+
 ### Where Next?
+
 If you are interested, it is best to look at the in-source unit tests in main file: [prototype.py](./prototype.py). These contain all the working ways to create objects.

@@ -1,4 +1,6 @@
 from inspect import isfunction
+from graphlib import TopologicalSorter
+
 
 def _f(): pass
 function = type(_f)
@@ -53,7 +55,7 @@ class method:
         """ support for 'super' """
         if name in {'_func', '_self', '_this', '_arg_names'}:
             return object.__getattribute__(me, name)
-        attr, this = me._this.lookup_parents(name)
+        attr, this = me._this.lookup(name, skip=me._this)
         return method(attr, me._self, this)
 
 
@@ -70,14 +72,14 @@ class prototype(metaclass=meta):
 
 
     def __init__(me, *parents, **attributes):
-        if not hasattr(me, '_parents'):
-            me._parents = tuple(p for p in parents if not isfunction(p))
+        if not hasattr(me, '__bases__'):
+            me.__bases__ = tuple(p for p in parents if not isfunction(p))
             me.__dict__.update(attributes)
             me.__dict__.update((f.__name__, f) for f in parents if isfunction(f))
 
 
     def __getattribute__(me, name):
-        if name in {'__dict__', '_parents', 'lookup', 'lookup_parents', '_call_dunder', 'get'}:
+        if name in {'__dict__', '__bases__', 'lookup', '_call_dunder', 'get'}:
             return object.__getattribute__(me, name)
 
         attr, this = me.lookup(name)
@@ -114,21 +116,16 @@ class prototype(metaclass=meta):
         return me._call_dunder('__hash__')
 
 
-    def lookup(me, name):
-        """ Look up attribute in instance dict and then in the parents. """
-        try:
-            return me.__dict__[name], me
-        except KeyError:
-            return me.lookup_parents(name)
-
-
-    def lookup_parents(me, name):
+    def lookup(me, name, skip=None):
         """ Depth (height) first lookup of attribute in the parents. """
-        for this in me._parents:
+        for this in linearize(me):
+            if id(this) == id(skip):
+                continue
             if isinstance(this, prototype):
                 try:
-                    return this.lookup(name)
-                except AttributeError:
+                    #return this.lookup(name)
+                    return this.__dict__[name], this
+                except KeyError:
                     continue
             else: # support Python classes and objects
                 try:
@@ -156,6 +153,25 @@ class prototype(metaclass=meta):
 
     def __repr__(me):
         return f"{me.get('__name__','')}[" + ', '.join(f"{k} = {me[k]}" for k in me) + ']'
+
+
+def linearize(obj):
+    """ C3 compatible linearization (which is a topological sort) """
+    idmap = {id(obj): obj}
+    graph = TopologicalSorter({id(obj): ()})
+
+    def add_bases(obj):
+        prev = None
+        for base in getattr(obj, '__bases__', ()):
+            idmap[id(base)] = base
+            graph.add(id(base), id(obj))
+            if prev:
+                graph.add(id(base), id(prev))
+            prev = base
+            add_bases(base)
+
+    add_bases(obj)
+    return [idmap[id] for id in graph.static_order()]
 
 
 @test
@@ -410,7 +426,7 @@ def you_could_even_inherit_from_eh_delegate_to_an_object():
         def f(super):
             return 2 * super.f()
     test.isinstance(b, prototype)
-    test.eq((a,), b._parents)
+    test.eq((a,), b.__bases__)
     test.eq(3, b.a)
     test.eq(2, b.b)
     test.eq(32, b.f())
@@ -443,6 +459,13 @@ def doc_example():
         a = 42
 
     test.eq(42, bottom.a)
+
+    f = bottom.f
+    test.eq(middle.f._func, f._func)
+    test.eq(bottom, f._self)
+    test.eq(middle, f._this)
+
+
     test.eq(84, bottom.f())                          # will return 84
     test.eq(16, bottom.g())                          # will return 16
 
@@ -577,15 +600,73 @@ def assignments():
 # TODO directed resend: this[<parent>].<method>(...)
 #      how to refer to parent? Index, name, ...?
 
-# TODO cyclde detection during lookup
+@test
+def C3_liniarization():
+    O = object
+    test.eq([O], linearize(O))
+    class A(O): pass
+    test.eq([A, O], linearize(A))
+    class B(O): pass
+    class C(O): pass
+    class D(O): pass
+    class E(O): pass
+    class K1(C, A, B): pass
+    test.eq([K1, C, A, B, O], linearize(K1), diff=test.diff)
+    test.eq(K1.mro(), linearize(K1), diff=test.diff)
+    class K2(B, D, E): pass
+    test.eq([K2, B, D, E, O], linearize(K2))
+    test.eq(K2.mro(), linearize(K2), diff=test.diff)
+    class K3(A, D): pass
+    test.eq([K3, A, D, O], linearize(K3))
+    test.eq(K3.mro(), linearize(K3), diff=test.diff)
+    class Z(K1, K3, K2): pass
+    test.eq(Z.mro(), linearize(Z), diff=test.diff)
+    test.eq([Z, K1, C, K3, A, K2, B, D, E, O], linearize(Z), diff=test.diff)
 
-# TODO find ambiguous attributes (by finding them all and not short circuit on the first hit)
 
-# TODO parent priorities?
+@test
+def C3_liniarization_with_prototypes():
+    O = prototype()
+    test.eq([O], linearize(O))
+    class A(O): pass
+    test.eq([A, O], linearize(A))
+    class B(O): pass
+    class C(O): pass
+    class D(O): pass
+    class E(O): pass
+    class K1(C, A, B): pass
+    test.eq([K1, C, A, B, O], linearize(K1), diff=test.diff)
+    class K2(B, D, E): pass
+    test.eq([K2, B, D, E, O], linearize(K2))
+    class K3(A, D): pass
+    test.eq([K3, A, D, O], linearize(K3))
+    class Z(K1, K3, K2): pass
+    test.eq([Z, K1, C, K3, A, K2, B, D, E, O], linearize(Z), diff=test.diff)
 
 
 @test
 def diamond():
+    class A:
+        x = 0
+        y = 0
+        def product(self):
+            return self.x * self.y
+
+    class B(A):
+        x = 5
+
+    class C(A):
+        y = 3
+
+    class D(B, C):
+        pass
+
+    class E(C, B):
+        pass
+
+    test.eq(15, D().product())
+    test.eq(15, E().product())
+
     class a(prototype):
         x = 0
         y = 0
@@ -604,5 +685,7 @@ def diamond():
     class e(c, b):
         pass
 
-    #test.eq(15, d.product())
-    #test.eq( 6, e.product())
+    test.eq(15, d.product())
+    test.eq(15, e.product())
+
+
