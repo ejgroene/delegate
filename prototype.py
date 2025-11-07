@@ -1,5 +1,5 @@
 from inspect import isfunction
-from graphlib import TopologicalSorter
+from graphlib import TopologicalSorter, CycleError
 
 
 def _f(): pass
@@ -689,4 +689,36 @@ def diamond():
     test.eq(15, d.product())
     test.eq(15, e.product())
 
+
+@test
+def inconsistent_mro_class():
+    O = object
+    class A(O): pass
+    class B(O): pass
+    class C(A, B): pass
+    class D(B, A): pass
+    try:
+        class E(C, D): pass
+        test.fail()
+    except TypeError as e:
+        test.eq("Cannot create a consistent method resolution order (MRO) for bases A, B", str(e))
+
+@test
+def inconsistent_mro_prototype():
+    O = prototype()
+    class A(O): pass
+    class B(O): pass
+    class C(A, B): pass
+    class D(B, A): pass
+    class E(C, D): pass
+    try:
+        E.a
+        test.fail()
+    except CycleError:
+        pass
+
+
+@test
+def wrap_attributes_in_boundattributes_in_preparation_for_caching():
+    pass
 
