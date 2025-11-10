@@ -1,90 +1,232 @@
 # Delegate
 
-True delegation in Python 3.
+A prototype-based delegation system for Python 3 that replaces class-based inheritance with object composition through delegation.
 
+## Overview
 
-### Inheritance vs Delegation
+This library implements a SELF-inspired delegation model that eliminates the complexity of Python's class system while maintaining compatibility with existing Python code. By treating all objects uniformly, it removes the need for classmethods, staticmethods, and metaclasses, replacing these constructs with a single, consistent method lookup mechanism.
 
-Inheritance based on objects is simpler and more powerful than using classes.
-This has been described for example [SELF: The Power of Simplicity](https://bibliography.selflanguage.org/_static/self-power.pdf)
+## Motivation
 
-Simplicity comes from three facts:
+Traditional class-based inheritance introduces unnecessary complexity through special cases and exceptions. Prototype-based delegation offers a simpler model built on three principles:
 
- 1. All objects are really equal.
- 2. Every lookup is equal.
- 3. Every method binding is equal.
+1. **Uniform object model** - All objects have equal status; no distinction between classes and instances
+2. **Consistent lookup** - Method resolution follows a single, predictable algorithm
+3. **Uniform binding** - All methods bind identically, without special decorators or descriptors
 
-What one would call a class method or static method is really just a method call on another object. Every method invocation behaves the same.
+This approach is inspired by [SELF: The Power of Simplicity](https://bibliography.selflanguage.org/_static/self-power.pdf), adapted to work within Python's ecosystem while maintaining interoperability with standard Python classes and objects.
 
-SELF was an inspiration for my mini-project, but I do not try to replicate the SELF lookup algorithms. These come with their own problems, and I want to stick to Python a bit more.
+## Installation
 
-
-### An Example
-
-OK, now let's look at an example:
+This is a single-file library with no external dependencies beyond Python 3.9+. Simply import the module:
 
 ```python
-    from prototype import prototype
-
-    a = prototype(area=lambda self: self.x * self.y)  # our base object, not a class
-    b = prototype(a, x = 3)                             # b has parent a and defines x
-    c = prototype(a, y = 4)                             # c also has parent a and defines y
-    d = prototype(b, c)                                 # d has parents b and c, inherits x and y
-
-    print(d.area())
-    >>> 12
+from prototype import prototype
 ```
 
-Here we create the objects `a`, `b`, `c` and `d`. Objects `b` and `c` have parent `a`, while `d` has two parents `b` and `c`. We'll introduce other syntax for this later.
+## Core Concepts
 
+### Object Creation
 
-### All Object are Equal
-
-The first thing to note is that all objects are really equal. In Python a class is also an object but it is very special in many ways. This leads to difficult concepts such as classmethods, staticmethods and metaclasses. These distinctions do not exist in prototyping. Instead these concepts are all mapped to the trivally simple concept of method lookup.
-
-
-### Lookup
-
-Method lookup in delegation is a very straightforward process. It makes a dependency graph from all the parents and traverses that in static order, see [Python graphlib](https://docs.python.org/3/library/graphlib.html).
-
-This coincidentally is equivalent to the C3 linearization algorithm that Python uses for method lookup.
-
-
-### Parameter injection
-
-Perhaps the most critical is the proper binding of the methods in the objects.  My code works by looking up each function on any object and then bind it to `self`, `this` and `super`. Any binding performed by Python is first undone.
-
-So all functions have aforementioned arguments. It is as simple as that. No exceptions. No decorators needed.
-
-`self` is what you'd expect: it *always* is the object the lookup took place on in: `<self>.<function>`. No exceptions.
-
-`this` is the object the method is found on. No exceptions.
-
-`super` represent the parents of `this` and can be used to refine a method and then invoke the refined method.
-
-Any of these parameters will automatically be injected based on the functions signature. If they appear they must appear in the order mentioned above.
-
-Oh, yes, there is one more thing: if you use `cls` instead of `self`, you will get another value: not `self` but `this`. This is such a typical example of the exceptions we want to get rid of, but it exists to allow for delegation to Python objects and classes.
-
-
-### Using class Syntax
-
-It is also possible to write:
+Objects are created directly without classes. Parents and attributes are specified at instantiation:
 
 ```python
-    from prototype import prototype
+from prototype import prototype
 
-    class a(prototype):
-        def area(self):
-            return self.x * self.y
+# Base object with a method
+base = prototype(area=lambda self: self.x * self.y)
 
-    b = prototype(a, x = 3)
-    ... and so on
+# Objects with parents and attributes
+obj_x = prototype(base, x=3)
+obj_y = prototype(base, y=4)
+
+# Multiple inheritance through delegation
+composite = prototype(obj_x, obj_y)
+
+print(composite.area())  # 12
 ```
 
-This creates exactly the same *object* `a` as above. For prototype objects that are to be used as parent, defining them using `class` syntax isn't too much a stretch.  You can also think of it as a desecration, but then you probably wouldn't be here.  Anyway, it shows how powerful Python is.
+### Method Resolution
 
+Method lookup uses C3 linearization (identical to Python's MRO) implemented via topological sort. The algorithm constructs a dependency graph from parent relationships and traverses it in deterministic order, ensuring consistent resolution in complex delegation hierarchies.
 
-### Where Next?
+### Parameter Injection
 
-If you are interested, it is best to look at the in-source unit tests in main file: [prototype.py](./prototype.py). These contain all the working ways to create objects.
+Methods receive up to three automatically injected parameters based on their signature:
+
+- **`self`** - The object on which the method was invoked (receiver)
+- **`this`** - The object where the method was defined (definer)
+- **`super`** - Proxy to parent objects for method refinement
+
+Parameters are injected by introspecting function signatures. Declare only the parameters you need:
+
+```python
+# Access to receiver only
+obj = prototype(get_x=lambda self: self.x)
+
+# Access to definer and receiver
+obj = prototype(identify=lambda self, this: (self, this))
+
+# Method refinement with super
+base = prototype(compute=lambda n: n * 3)
+refined = prototype(base, compute=lambda self, super, n: 2 * super.compute(n))
+
+refined.compute(5)  # 30
+```
+
+The `super` parameter provides access to parent implementations, enabling method refinement without explicit parent references.
+
+### Compatibility with Python Classes
+
+The system interoperates with standard Python classes and objects:
+
+```python
+class PythonClass:
+    def method(self):
+        return 42
+
+# Delegate to a class
+obj = prototype(PythonClass)
+obj.method()  # 42
+
+# Delegate to an instance
+instance = PythonClass()
+obj = prototype(instance)
+obj.method()  # 42
+```
+
+For compatibility, functions using `cls` as the first parameter receive `this` instead of `self`, matching Python's classmethod behavior.
+
+### Class Syntax
+
+Prototype objects can be defined using class syntax for familiarity:
+
+```python
+class Shape(prototype):
+    def area(self):
+        return self.x * self.y
+
+class rectangle(Shape):
+    x = 3
+    y = 4
+
+rectangle.area()  # 12
+```
+
+This syntax creates prototype objects, not classes. The metaclass intercepts class creation and returns prototype instances.
+
+## Technical Details
+
+### Implementation
+
+The library consists of three core components:
+
+- **`prototype`** - Main class representing all objects, stores parents in `__bases__` and attributes in `__dict__`
+- **`method`** - Bound method wrapper that handles parameter injection and serves as the `super` proxy
+- **`meta`** - Metaclass that enables class syntax by intercepting class definitions
+
+### Method Lookup Algorithm
+
+```python
+def linearize(obj):
+    """C3 compatible linearization via topological sort"""
+    # Build dependency graph from parent relationships
+    # Traverse in static order
+    # Return linearized list of objects
+```
+
+The `lookup()` method traverses this linearization, checking each object's `__dict__` for the requested attribute. When found, functions are wrapped in `method` objects that handle parameter injection.
+
+### Dunder Method Handling
+
+Special methods (`__call__`, `__eq__`, `__hash__`, etc.) are looked up in the instance before falling back to the class, matching Python's behavior while maintaining delegation semantics.
+
+## Examples
+
+### Diamond Inheritance
+
+```python
+class A(prototype):
+    x = 0
+    y = 0
+    def product(self):
+        return self.x * self.y
+
+class B(A):
+    x = 5
+
+class C(A):
+    y = 3
+
+class D(B, C):
+    pass
+
+D.product()  # 15
+```
+
+### Method Refinement
+
+```python
+# Base implementation
+logger = prototype(
+    log=lambda self, msg: print(f"[LOG] {msg}")
+)
+
+# Refined implementation
+timestamped_logger = prototype(
+    logger,
+    log=lambda self, super, msg: super.log(f"{time.time()}: {msg}")
+)
+
+# Further refinement
+filtered_logger = prototype(
+    timestamped_logger,
+    log=lambda self, super, msg: super.log(msg) if self.level > 0 else None,
+    level=1
+)
+```
+
+### Dynamic Object Composition
+
+```python
+# Create objects at runtime
+def make_counter(start=0):
+    return prototype(
+        value=start,
+        increment=lambda self: setattr(self, 'value', self.value + 1) or self.value,
+        decrement=lambda self: setattr(self, 'value', self.value - 1) or self.value
+    )
+
+counter = make_counter(10)
+counter.increment()  # 11
+```
+
+## Testing
+
+The library includes comprehensive inline tests using the `@test` decorator. Tests cover:
+
+- Object creation and initialization
+- Method lookup and binding
+- Parameter injection
+- Python class/object delegation
+- C3 linearization
+- Dunder method handling
+- Edge cases and error conditions
+
+Refer to [prototype.py](./prototype.py) for complete test coverage and additional usage examples.
+
+## Requirements
+
+- Python 3.9+ (requires `graphlib.TopologicalSorter`)
+- No external dependencies for core functionality
+- `selftest` framework for running inline tests
+
+## License
+
+GNU General Public License v3.0
+
+## References
+
+- [SELF: The Power of Simplicity](https://bibliography.selflanguage.org/_static/self-power.pdf) - Original inspiration
+- [Python C3 Linearization](https://www.python.org/download/releases/2.3/mro/) - Method resolution order
+- [Python graphlib](https://docs.python.org/3/library/graphlib.html) - Topological sorting implementation
