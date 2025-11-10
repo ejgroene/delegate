@@ -50,7 +50,7 @@ Method lookup in delegation is a very straightforward process. It makes a depend
 This coincidentally is equivalent to the C3 linearization algorithm that Python uses for method lookup.
 
 
-### Binding self, this and super
+### Parameter injection
 
 Perhaps the most critical is the proper binding of the methods in the objects.  My code works by looking up each function on any object and then bind it to `self`, `this` and `super`. Any binding performed by Python is first undone.
 
@@ -62,7 +62,7 @@ So all functions have aforementioned arguments. It is as simple as that. No exce
 
 `super` represent the parents of `this` and can be used to refine a method and then invoke the refined method.
 
-Actually, there is an optimization: you can leave out any or all of them, and there won't be a complaint.
+Any of these parameters will automatically be injected based on the functions signature. If they appear they must appear in the order mentioned above.
 
 Oh, yes, there is one more thing: if you use `cls` instead of `self`, you will get another value: not `self` but `this`. This is such a typical example of the exceptions we want to get rid of, but it exists to allow for delegation to Python objects and classes.
 
