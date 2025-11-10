@@ -69,7 +69,7 @@ obj = prototype(identify=lambda self, this: (self, this))
 
 # Method refinement with super
 base = prototype(compute=lambda n: n * 3)
-refined = prototype(base, compute=lambda self, super, n: 2 * super.compute(n))
+refined = prototype(base, compute=lambda super, n: 2 * super.compute(n))
 
 refined.compute(5)  # 30
 ```
@@ -169,13 +169,13 @@ D.product()  # 15
 ```python
 # Base implementation
 logger = prototype(
-    log=lambda self, msg: print(f"[LOG] {msg}")
+    log=lambda msg: print(f"[LOG] {msg}")
 )
 
 # Refined implementation
 timestamped_logger = prototype(
     logger,
-    log=lambda self, super, msg: super.log(f"{time.time()}: {msg}")
+    log=lambda super, msg: super.log(f"{time.time()}: {msg}")
 )
 
 # Further refinement
