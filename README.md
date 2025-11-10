@@ -18,7 +18,13 @@ This approach is inspired by [SELF: The Power of Simplicity](https://bibliograph
 
 ## Installation
 
-This is a single-file library with no external dependencies beyond Python 3.9+. Simply import the module:
+This is a single-file library with minimal dependencies. Install the required testing framework:
+
+```bash
+pip install selftest
+```
+
+Then import the module:
 
 ```python
 from prototype import prototype
@@ -191,14 +197,23 @@ filtered_logger = prototype(
 ```python
 # Create objects at runtime
 def make_counter(start=0):
+    def increment(self):
+        self.value += 1
+        return self.value
+    
+    def decrement(self):
+        self.value -= 1
+        return self.value
+    
     return prototype(
         value=start,
-        increment=lambda self: setattr(self, 'value', self.value + 1) or self.value,
-        decrement=lambda self: setattr(self, 'value', self.value - 1) or self.value
+        increment=increment,
+        decrement=decrement
     )
 
 counter = make_counter(10)
 counter.increment()  # 11
+counter.decrement()  # 10
 ```
 
 ## Testing
@@ -218,8 +233,7 @@ Refer to [prototype.py](./prototype.py) for complete test coverage and additiona
 ## Requirements
 
 - Python 3.9+ (requires `graphlib.TopologicalSorter`)
-- No external dependencies for core functionality
-- `selftest` framework for running inline tests
+- `selftest` - Testing framework for inline tests
 
 ## License
 
